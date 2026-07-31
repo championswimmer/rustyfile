@@ -1,8 +1,11 @@
+//! Command-line adapter around the filesystem library.
+
 use rustyfile::layout::{FileKind, BLOCK_SIZE, MAX_FILE_SIZE, ROOT_INODE};
 use rustyfile::{FileSystem, FsError, Result};
 use std::env;
 use std::io::{self, BufRead, Write};
 
+/// Print CLI errors once and return a conventional failure status.
 fn main() {
     if let Err(error) = run() {
         eprintln!("rustyfile: {error}");
@@ -10,6 +13,7 @@ fn main() {
     }
 }
 
+/// Dispatch formatting, an interactive shell, or a one-shot command.
 fn run() -> Result<()> {
     let mut args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() || matches!(args[0].as_str(), "-h" | "--help" | "help") {
@@ -17,6 +21,7 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
+    // The first argument selects lifecycle mode or names an image.
     match args.remove(0).as_str() {
         "mkfs" => command_mkfs(&args),
         "shell" => {
@@ -39,6 +44,7 @@ fn run() -> Result<()> {
     }
 }
 
+/// Format a new image or an already-sized host file.
 fn command_mkfs(args: &[String]) -> Result<()> {
     if args.is_empty() {
         return Err(FsError::InvalidPath(
@@ -46,6 +52,7 @@ fn command_mkfs(args: &[String]) -> Result<()> {
         ));
     }
     let image = &args[0];
+    // No size means the image must already exist and be block-aligned.
     let size = match &args[1..] {
         [] => None,
         [flag, value] if flag == "--size" => Some(parse_size(value)?),
@@ -66,6 +73,7 @@ fn command_mkfs(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// Keep one image and current directory open across shell commands.
 fn command_shell(image: &str) -> Result<()> {
     let mut fs = FileSystem::open(image)?;
     let mut cwd = ROOT_INODE;
@@ -77,6 +85,7 @@ fn command_shell(image: &str) -> Result<()> {
     if interactive {
         println!("Rustyfile shell. Type `help` for commands.");
     }
+    // A terminal gets prompts; redirected scripts receive clean output.
     loop {
         if interactive {
             print!("rustyfile:{cwd_path}$ ");
@@ -86,6 +95,7 @@ fn command_shell(image: &str) -> Result<()> {
             break;
         };
         let line = line?;
+        // Parse quotes before dispatching the command.
         let words = match split_command_line(&line) {
             Ok(words) => words,
             Err(message) => {
@@ -100,6 +110,7 @@ fn command_shell(image: &str) -> Result<()> {
         if matches!(command.as_str(), "exit" | "quit") {
             break;
         }
+        // Command errors are recoverable and do not close the shell.
         if let Err(error) = execute(&mut fs, &mut cwd, &mut cwd_path, command, &words[1..]) {
             eprintln!("error: {error}");
         }
@@ -107,6 +118,7 @@ fn command_shell(image: &str) -> Result<()> {
     fs.sync()
 }
 
+/// Execute one shell command against the current directory.
 fn execute(
     fs: &mut FileSystem,
     cwd: &mut u32,
@@ -114,6 +126,7 @@ fn execute(
     command: &str,
     args: &[String],
 ) -> Result<()> {
+    // This layer handles text and host files; storage stays in the library.
     match command {
         "help" => print_shell_help(),
         "pwd" => {
@@ -238,6 +251,7 @@ fn execute(
     Ok(())
 }
 
+/// Parse bytes or a binary K/M/G size suffix.
 fn parse_size(text: &str) -> Result<u64> {
     let (number, multiplier) = match text.as_bytes().last().copied() {
         Some(b'K' | b'k') => (&text[..text.len() - 1], 1024_u64),
@@ -253,6 +267,7 @@ fn parse_size(text: &str) -> Result<u64> {
         .ok_or_else(|| FsError::InvalidPath(format!("size is too large: {text}")))
 }
 
+/// Normalize a successful `cd` path for the prompt.
 fn normalize_display_path(cwd: &str, path: &str) -> String {
     let combined = if path.starts_with('/') {
         path.to_owned()
@@ -261,6 +276,7 @@ fn normalize_display_path(cwd: &str, path: &str) -> String {
     } else {
         format!("{cwd}/{path}")
     };
+    // A stack makes `..` remove exactly one prior component.
     let mut parts = Vec::new();
     for part in combined.split('/') {
         match part {
@@ -286,6 +302,7 @@ fn split_command_line(line: &str) -> std::result::Result<Vec<String>, String> {
     let mut quote = None;
     let mut escaped = false;
     let mut word_started = false;
+    // Scan once while tracking the active quote and escape state.
     for character in line.chars() {
         if escaped {
             word.push(character);
@@ -330,11 +347,13 @@ fn split_command_line(line: &str) -> std::result::Result<Vec<String>, String> {
     Ok(words)
 }
 
+/// Require exactly one argument and return it.
 fn exactly_one<'a>(args: &'a [String], usage: &str) -> Result<&'a str> {
     require_count(args, 1, usage)?;
     Ok(&args[0])
 }
 
+/// Accept an optional single argument.
 fn zero_or_one<'a>(args: &'a [String], usage: &str) -> Result<Option<&'a str>> {
     if args.len() > 1 {
         return Err(FsError::InvalidPath(format!("usage: {usage}")));
@@ -342,6 +361,7 @@ fn zero_or_one<'a>(args: &'a [String], usage: &str) -> Result<Option<&'a str>> {
     Ok(args.first().map(String::as_str))
 }
 
+/// Produce a consistent usage error for the wrong argument count.
 fn require_count(args: &[String], count: usize, usage: &str) -> Result<()> {
     if args.len() != count {
         return Err(FsError::InvalidPath(format!("usage: {usage}")));
@@ -349,6 +369,7 @@ fn require_count(args: &[String], count: usize, usage: &str) -> Result<()> {
     Ok(())
 }
 
+/// Print top-level invocation help.
 fn print_usage() {
     println!(
         "\
@@ -368,6 +389,7 @@ EXAMPLES
     );
 }
 
+/// Print commands available inside an opened image.
 fn print_shell_help() {
     println!(
         "\
@@ -386,6 +408,7 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Quoting preserves spaces without retaining quote characters.
     fn shell_words_support_quotes_and_escapes() {
         assert_eq!(
             split_command_line(r#"write "my file" 'hello world'"#).unwrap(),
@@ -398,6 +421,7 @@ mod tests {
     }
 
     #[test]
+    /// Prompt paths collapse dot components and cannot move above root.
     fn paths_are_normalized_for_prompt() {
         assert_eq!(normalize_display_path("/one/two", "../three"), "/one/three");
         assert_eq!(normalize_display_path("/", "../../"), "/");
@@ -408,6 +432,7 @@ mod tests {
     }
 
     #[test]
+    /// Human-readable sizes use powers of 1024.
     fn human_sizes_are_binary() {
         assert_eq!(parse_size("100M").unwrap(), 100 * 1024 * 1024);
         assert_eq!(parse_size("4096").unwrap(), 4096);

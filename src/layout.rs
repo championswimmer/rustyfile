@@ -41,6 +41,7 @@ pub enum FileKind {
 }
 
 impl FileKind {
+    /// Decode the stable numeric kind stored on disk.
     pub fn from_byte(value: u8) -> Result<Self> {
         match value {
             1 => Ok(Self::File),
@@ -49,6 +50,7 @@ impl FileKind {
         }
     }
 
+    /// Return the kind name shown by `stat`.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::File => "file",
@@ -63,11 +65,16 @@ pub(crate) struct Superblock {
 }
 
 impl Superblock {
+    /// Encode the fixed layout description into block zero.
     pub fn encode(&self) -> [u8; BLOCK_SIZE] {
         let mut bytes = [0; BLOCK_SIZE];
+
+        // Identity fields reject unrelated or incompatible images.
         bytes[0..8].copy_from_slice(&MAGIC);
         put_u32(&mut bytes, 8, VERSION);
         put_u32(&mut bytes, 12, BLOCK_SIZE as u32);
+
+        // Location fields describe every metadata region.
         put_u32(&mut bytes, 16, self.total_blocks);
         put_u32(&mut bytes, 20, INODE_COUNT);
         put_u32(&mut bytes, 24, INODE_BITMAP_BLOCK);
@@ -78,7 +85,9 @@ impl Superblock {
         bytes
     }
 
+    /// Validate and decode block zero.
     pub fn decode(bytes: &[u8; BLOCK_SIZE]) -> Result<Self> {
+        // Check identity before trusting any location fields.
         if bytes[0..8] != MAGIC {
             return Err(FsError::InvalidImage(
                 "missing RUSTYFS signature; run `rustyfile mkfs` first".into(),
@@ -90,6 +99,7 @@ impl Superblock {
                 "unsupported format version {version}"
             )));
         }
+        // Version 1 has a fixed layout compiled into the reader.
         if get_u32(bytes, 12) != BLOCK_SIZE as u32
             || get_u32(bytes, 20) != INODE_COUNT
             || get_u32(bytes, 24) != INODE_BITMAP_BLOCK
@@ -103,6 +113,7 @@ impl Superblock {
             ));
         }
         let total_blocks = get_u32(bytes, 16);
+        // The count must leave room for metadata and at least one data block.
         if !(DATA_BLOCK_START + 1..=MAX_BLOCKS).contains(&total_blocks) {
             return Err(FsError::InvalidImage("invalid image block count".into()));
         }
@@ -118,6 +129,7 @@ pub(crate) struct Inode {
 }
 
 impl Inode {
+    /// Create an inode with no data blocks.
     pub fn empty(kind: FileKind) -> Self {
         Self {
             kind,
@@ -126,16 +138,20 @@ impl Inode {
         }
     }
 
+    /// Encode inode metadata and direct pointers into one table slot.
     pub fn encode(&self) -> [u8; INODE_SIZE] {
         let mut bytes = [0; INODE_SIZE];
         bytes[0] = self.kind as u8;
         put_u64(&mut bytes, 8, self.size);
+
+        // Zero means unused; real data starts at block 11.
         for (index, block) in self.direct.iter().enumerate() {
             put_u32(&mut bytes, 16 + index * 4, *block);
         }
         bytes
     }
 
+    /// Decode and sanity-check one inode-table slot.
     pub fn decode(bytes: &[u8; INODE_SIZE]) -> Result<Self> {
         let kind = FileKind::from_byte(bytes[0])?;
         let size = get_u64(bytes, 8);
@@ -143,12 +159,14 @@ impl Inode {
             return Err(FsError::Corrupt("inode size exceeds direct blocks".into()));
         }
         let mut direct = [0; DIRECT_POINTERS];
+        // Pointer ranges are checked later when the blocks are read.
         for (index, block) in direct.iter_mut().enumerate() {
             *block = get_u32(bytes, 16 + index * 4);
         }
         Ok(Self { kind, size, direct })
     }
 
+    /// Count the inode's nonzero direct pointers.
     pub fn blocks_used(&self) -> usize {
         self.direct.iter().filter(|block| **block != 0).count()
     }
@@ -162,12 +180,15 @@ pub(crate) struct DirEntry {
 }
 
 impl DirEntry {
+    /// Encode one name-to-inode mapping into 64 bytes.
     pub fn encode(&self) -> Result<[u8; DIR_ENTRY_SIZE]> {
         let name = self.name.as_bytes();
         if name.len() > MAX_NAME_LEN {
             return Err(FsError::NameTooLong(self.name.clone()));
         }
         let mut bytes = [0; DIR_ENTRY_SIZE];
+
+        // The header allows unused slots and exact UTF-8 name lengths.
         put_u32(&mut bytes, 0, self.inode);
         bytes[4] = self.kind as u8;
         bytes[5] = 1; // "used" flag
@@ -176,6 +197,7 @@ impl DirEntry {
         Ok(bytes)
     }
 
+    /// Decode one directory slot, returning `None` for an unused slot.
     pub fn decode(bytes: &[u8]) -> Result<Option<Self>> {
         if bytes[5] == 0 {
             return Ok(None);
@@ -184,6 +206,7 @@ impl DirEntry {
         if length > MAX_NAME_LEN {
             return Err(FsError::Corrupt("directory name is too long".into()));
         }
+        // Names are valid UTF-8 by format design.
         let name = std::str::from_utf8(&bytes[8..8 + length])
             .map_err(|_| FsError::Corrupt("directory name is not UTF-8".into()))?
             .to_owned();
@@ -195,18 +218,22 @@ impl DirEntry {
     }
 }
 
+/// Store a little-endian 32-bit integer at a stable offset.
 fn put_u32(bytes: &mut [u8], offset: usize, value: u32) {
     bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
 }
 
+/// Store a little-endian 64-bit integer at a stable offset.
 fn put_u64(bytes: &mut [u8], offset: usize, value: u64) {
     bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
 }
 
+/// Read a little-endian 32-bit integer from a stable offset.
 fn get_u32(bytes: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
 }
 
+/// Read a little-endian 64-bit integer from a stable offset.
 fn get_u64(bytes: &[u8], offset: usize) -> u64 {
     u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap())
 }

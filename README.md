@@ -100,9 +100,12 @@ For `write /notes/a.txt hello`, Rustyfile does roughly this:
 Read these files in order:
 
 1. [`src/layout.rs`](src/layout.rs) — constants and byte encoding for structures.
-2. [`src/filesystem.rs`](src/filesystem.rs) — allocation, lookup, and operations.
-3. [`src/main.rs`](src/main.rs) — the thin command-line shell.
-4. [`docs/FORMAT.md`](docs/FORMAT.md) — a byte-level map and worked example.
+2. [`src/filesystem/mod.rs`](src/filesystem/mod.rs) — image lifecycle and module map.
+3. [`src/filesystem/disk.rs`](src/filesystem/disk.rs) — block I/O and allocation.
+4. [`src/filesystem/directory.rs`](src/filesystem/directory.rs) — paths and directories.
+5. [`src/filesystem/file.rs`](src/filesystem/file.rs) — regular-file operations.
+6. [`src/main.rs`](src/main.rs) — the thin command-line shell.
+7. [`docs/FORMAT.md`](docs/FORMAT.md) — a byte-level map and worked example.
 
 Run the tests while experimenting:
 
@@ -128,4 +131,3 @@ Keeping the implementation readable requires visible tradeoffs:
 Those omissions are good next exercises. A natural progression is an indirect
 block (larger files), then an integrity checker, then a write-ahead journal, and
 finally a FUSE adapter.
-
