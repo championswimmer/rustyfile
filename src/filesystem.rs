@@ -445,7 +445,11 @@ impl FileSystem {
         for entry in entries {
             data.extend_from_slice(&entry.encode()?);
         }
-        self.replace_inode_data(inode_number, inode, &data)
+        // Reuse a directory's existing blocks. In particular, removing a file
+        // must work when the image is full, because deletion is how a user
+        // recovers space. Regular file replacement uses the more conservative
+        // allocate-before-free path in `replace_inode_data`.
+        self.rewrite_inode_data_reusing_blocks(inode_number, inode, &data)
     }
 
     fn read_inode_data(&mut self, inode: &Inode) -> Result<Vec<u8>> {
@@ -508,6 +512,62 @@ impl FileSystem {
         inode.size = data.len() as u64;
         self.write_inode(inode_number, inode)?;
         for block in old_blocks {
+            self.set_block_allocated(block, false)?;
+        }
+        Ok(())
+    }
+
+    fn rewrite_inode_data_reusing_blocks(
+        &mut self,
+        inode_number: u32,
+        inode: &mut Inode,
+        data: &[u8],
+    ) -> Result<()> {
+        if data.len() > MAX_FILE_SIZE {
+            return Err(FsError::FileTooLarge {
+                size: data.len(),
+                maximum: MAX_FILE_SIZE,
+            });
+        }
+        let needed = blocks_for(data.len());
+        let old_blocks: Vec<u32> = inode
+            .direct
+            .iter()
+            .copied()
+            .filter(|block| *block != 0)
+            .collect();
+        let retained = old_blocks.len().min(needed);
+        let mut blocks = old_blocks[..retained].to_vec();
+        let mut newly_allocated = Vec::new();
+
+        for _ in retained..needed {
+            match self.allocate_block() {
+                Ok(block) => {
+                    blocks.push(block);
+                    newly_allocated.push(block);
+                }
+                Err(error) => {
+                    for block in newly_allocated {
+                        self.set_block_allocated(block, false)?;
+                    }
+                    return Err(error);
+                }
+            }
+        }
+
+        for (index, block) in blocks.iter().enumerate() {
+            let mut bytes = [0; BLOCK_SIZE];
+            let start = index * BLOCK_SIZE;
+            let end = data.len().min(start + BLOCK_SIZE);
+            bytes[..end - start].copy_from_slice(&data[start..end]);
+            self.write_block(*block, &bytes)?;
+        }
+
+        inode.direct = [0; DIRECT_POINTERS];
+        inode.direct[..blocks.len()].copy_from_slice(&blocks);
+        inode.size = data.len() as u64;
+        self.write_inode(inode_number, inode)?;
+        for block in old_blocks.into_iter().skip(needed) {
             self.set_block_allocated(block, false)?;
         }
         Ok(())
@@ -711,6 +771,26 @@ mod tests {
         assert!(matches!(
             fs.write_file(ROOT_INODE, "huge", &vec![0; MAX_FILE_SIZE + 1]),
             Err(FsError::FileTooLarge { .. })
+        ));
+        drop(fs);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn deletion_still_works_when_every_block_is_used() {
+        let path = image_path("full-delete");
+        // Metadata uses blocks 0..=10, root uses 11, and the file uses 12.
+        let mut fs = FileSystem::format(&path, Some(13 * BLOCK_SIZE as u64)).unwrap();
+        fs.write_file(ROOT_INODE, "last-block", b"x").unwrap();
+        let full = fs.info().unwrap();
+        assert_eq!(full.used_blocks, full.total_blocks);
+
+        fs.remove_file(ROOT_INODE, "last-block").unwrap();
+        let recovered = fs.info().unwrap();
+        assert_eq!(recovered.used_blocks + 1, recovered.total_blocks);
+        assert!(matches!(
+            fs.read_file(ROOT_INODE, "last-block"),
+            Err(FsError::NotFound(_))
         ));
         drop(fs);
         std::fs::remove_file(path).unwrap();
