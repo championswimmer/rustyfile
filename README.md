@@ -97,16 +97,26 @@ For `write /notes/a.txt hello`, Rustyfile does roughly this:
 6. Store the block numbers and byte length in the file's inode.
 7. Release the file's old blocks, if this replaced existing contents.
 
+For source-led, step-by-step explanations of every operation—including inline
+implementation excerpts and colored diagrams—start with
+[`docs/OPERATIONS.md`](docs/OPERATIONS.md). Its tutorials trace:
+
+- image formatting, opening, flushing, and allocation statistics;
+- path resolution, directory reads, `mkdir`, `rmdir`, `cd`, and `stat`;
+- `touch`, exact-byte reads, replacement writes, append, import, and export;
+- clearing file contents, unlinking, bitmap allocation, and failure ordering.
+
 Read these files in order:
 
-1. [`src/layout.rs`](src/layout.rs) — constants and byte encoding for structures.
-2. [`src/filesystem/mod.rs`](src/filesystem/mod.rs) — image lifecycle and module map.
-3. [`src/filesystem/disk.rs`](src/filesystem/disk.rs) — block I/O and allocation.
-4. [`src/filesystem/directory.rs`](src/filesystem/directory.rs) — paths and directories.
-5. [`src/filesystem/file.rs`](src/filesystem/file.rs) — regular-file operations.
-6. [`src/main.rs`](src/main.rs) — the thin command-line shell.
-7. [`docs/FORMAT.md`](docs/FORMAT.md) — a byte-level map and worked example.
-8. [`docs/SHELL_ONLY_AND_PRODUCTION_PATH.md`](docs/SHELL_ONLY_AND_PRODUCTION_PATH.md) — why Rustyfile only works through its own shell today, plus what would be required for POSIX compatibility and a production-grade mountable filesystem.
+1. [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — tutorial index and complete command-to-code map.
+2. [`src/layout.rs`](src/layout.rs) — constants and byte encoding for structures.
+3. [`src/filesystem/mod.rs`](src/filesystem/mod.rs) — image lifecycle and module map.
+4. [`src/filesystem/disk.rs`](src/filesystem/disk.rs) — block I/O and allocation.
+5. [`src/filesystem/directory.rs`](src/filesystem/directory.rs) — paths and directories.
+6. [`src/filesystem/file.rs`](src/filesystem/file.rs) — regular-file operations.
+7. [`src/main.rs`](src/main.rs) — the thin command-line shell.
+8. [`docs/FORMAT.md`](docs/FORMAT.md) — a byte-level map and worked example.
+9. [`docs/SHELL_ONLY_AND_PRODUCTION_PATH.md`](docs/SHELL_ONLY_AND_PRODUCTION_PATH.md) — why Rustyfile only works through its own shell today, plus what would be required for POSIX compatibility and a production-grade mountable filesystem.
 
 Run the tests while experimenting:
 

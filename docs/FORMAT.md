@@ -4,6 +4,10 @@ This document describes what is physically inside a Rustyfile image. All
 integers use little-endian byte order. Blocks are 4096 bytes and block numbers
 start at zero.
 
+For instructional traces showing exactly how commands manipulate these
+structures, including inline Rust excerpts and colored Mermaid diagrams, start
+with [How Rustyfile operations execute](OPERATIONS.md).
+
 ## Whole-image map
 
 ```text
@@ -127,4 +131,3 @@ can still leak blocks or leave partial state because there is no journal.
 Deleting a regular file removes its directory entry, clears its data-block bits,
 and clears its inode bit. A directory can be deleted only when it contains
 nothing except `.` and `..`.
-
