@@ -1,0 +1,19 @@
+[package]
+name = "rustyfile"
+version = "0.1.0"
+edition = "2021"
+description = "A tiny, learning-oriented filesystem stored in one block file"
+license = "MIT"
+
+[lib]
+name = "rustyfile"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rustyfile"
+path = "src/main.rs"
+
+[profile.release]
+strip = true
+lto = true
+
