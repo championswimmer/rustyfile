@@ -13,6 +13,7 @@ fn image_path(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("rustyfile-{name}-{unique}.img"))
 }
 
+/// Data and directory entries survive closing and reopening the image.
 #[test]
 fn format_and_reopen() {
     let path = image_path("reopen");
@@ -32,6 +33,7 @@ fn format_and_reopen() {
     std::fs::remove_file(path).unwrap();
 }
 
+/// Directory `..` entries support relative traversal.
 #[test]
 fn relative_paths_and_parent_entries_work() {
     let path = image_path("paths");
@@ -45,6 +47,7 @@ fn relative_paths_and_parent_entries_work() {
     std::fs::remove_file(path).unwrap();
 }
 
+/// Removing a file returns both allocation kinds to their prior counts.
 #[test]
 fn remove_reclaims_blocks_and_inodes() {
     let path = image_path("remove");
@@ -60,6 +63,7 @@ fn remove_reclaims_blocks_and_inodes() {
     std::fs::remove_file(path).unwrap();
 }
 
+/// `rmdir` protects directories that still contain user entries.
 #[test]
 fn nonempty_directory_cannot_be_removed() {
     let path = image_path("rmdir");
@@ -74,6 +78,7 @@ fn nonempty_directory_cannot_be_removed() {
     std::fs::remove_file(path).unwrap();
 }
 
+/// Direct pointers impose the documented per-file limit.
 #[test]
 fn maximum_file_size_is_enforced() {
     let path = image_path("large");
@@ -86,6 +91,7 @@ fn maximum_file_size_is_enforced() {
     std::fs::remove_file(path).unwrap();
 }
 
+/// Reusing directory blocks lets deletion recover a completely full image.
 #[test]
 fn deletion_still_works_when_every_block_is_used() {
     let path = image_path("full-delete");

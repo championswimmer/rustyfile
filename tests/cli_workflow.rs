@@ -1,8 +1,10 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Create an isolated host directory for an image and transfer files.
 fn unique_dir() -> PathBuf {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -11,6 +13,7 @@ fn unique_dir() -> PathBuf {
     std::env::temp_dir().join(format!("rustyfile-cli-{unique}"))
 }
 
+/// Run one CLI process inside the isolated directory.
 fn run(binary: &str, directory: &Path, args: &[&str]) -> Output {
     Command::new(binary)
         .args(args)
@@ -19,6 +22,7 @@ fn run(binary: &str, directory: &Path, args: &[&str]) -> Output {
         .unwrap()
 }
 
+/// Fail with captured output or return successful stdout.
 fn assert_success(output: Output) -> String {
     assert!(
         output.status.success(),
@@ -29,6 +33,7 @@ fn assert_success(output: Output) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
+/// Exercise formatting, shell use, persistence, binary copy, and cleanup.
 #[test]
 fn complete_100_mib_cli_workflow_persists() {
     let binary = env!("CARGO_BIN_EXE_rustyfile");
@@ -114,5 +119,3 @@ fn complete_100_mib_cli_workflow_persists() {
 
     fs::remove_dir_all(directory).unwrap();
 }
-
-use std::io::Write;

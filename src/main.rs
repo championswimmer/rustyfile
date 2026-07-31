@@ -407,8 +407,8 @@ Shell:       help, exit, quit"
 mod tests {
     use super::*;
 
-    #[test]
     /// Quoting preserves spaces without retaining quote characters.
+    #[test]
     fn shell_words_support_quotes_and_escapes() {
         assert_eq!(
             split_command_line(r#"write "my file" 'hello world'"#).unwrap(),
@@ -420,8 +420,8 @@ mod tests {
         );
     }
 
-    #[test]
     /// Prompt paths collapse dot components and cannot move above root.
+    #[test]
     fn paths_are_normalized_for_prompt() {
         assert_eq!(normalize_display_path("/one/two", "../three"), "/one/three");
         assert_eq!(normalize_display_path("/", "../../"), "/");
@@ -431,8 +431,8 @@ mod tests {
         );
     }
 
-    #[test]
     /// Human-readable sizes use powers of 1024.
+    #[test]
     fn human_sizes_are_binary() {
         assert_eq!(parse_size("100M").unwrap(), 100 * 1024 * 1024);
         assert_eq!(parse_size("4096").unwrap(), 4096);
