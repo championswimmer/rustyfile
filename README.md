@@ -106,6 +106,7 @@ Read these files in order:
 5. [`src/filesystem/file.rs`](src/filesystem/file.rs) — regular-file operations.
 6. [`src/main.rs`](src/main.rs) — the thin command-line shell.
 7. [`docs/FORMAT.md`](docs/FORMAT.md) — a byte-level map and worked example.
+8. [`docs/SHELL_ONLY_AND_PRODUCTION_PATH.md`](docs/SHELL_ONLY_AND_PRODUCTION_PATH.md) — why Rustyfile only works through its own shell today, plus what would be required for POSIX compatibility and a production-grade mountable filesystem.
 
 Run the tests while experimenting:
 
